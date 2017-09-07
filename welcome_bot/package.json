@@ -10,14 +10,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/mcgill-robotics/bots"
+    "url": "git+https://github.com/mcgill-robotics/bots.git"
   },
   "author": "Bei Chen Liu",
-  "license": "GPLV2",
+  "license": "MIT",
   "dependencies": {
     "body-parser": "^1.15.0",
     "ejs": "^2.4.2",
-    "express": "^4.13.4",
+    "express": "^4.15.4",
     "request": "^2.72.0"
   },
   "engines": {
@@ -28,5 +28,9 @@
     "eslint-config-standard": "^10.2.1",
     "eslint-plugin-promise": "^3.5.0",
     "eslint-plugin-standard": "^3.0.1"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/mcgill-robotics/bots/issues"
+  },
+  "homepage": "https://github.com/mcgill-robotics/bots#readme"
 }
