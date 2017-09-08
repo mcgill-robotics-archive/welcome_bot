@@ -1,0 +1,13 @@
+[Unit]
+Description=Welcome Bot
+
+[Service]
+Type=simple
+User=your_user
+Group=your_group
+WorkingDirectory=/your/path/to/welcome_bot
+ExecStart=/usr/bin/node app.js
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
