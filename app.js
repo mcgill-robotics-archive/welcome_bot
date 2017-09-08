@@ -11,11 +11,12 @@
 'use strict';
 
 const
-bodyParser = require('body-parser'),
-           crypto = require('crypto'),
-           express = require('express'),
-           request = require('request'),
-           config = require('./config.json');
+      bodyParser = require('body-parser'),
+      crypto = require('crypto'),
+      express = require('express'),
+      request = require('request'),
+      config = require('./config.json'),
+      welcome_msgs = require('./welcome_msgs.json').msgs;
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v2.10';
 
@@ -23,12 +24,10 @@ if (!(config.app_id &&
       config.app_secret &&
       config.verify_token &&
       config.access_token &&
-      config.server_url)) {
+      config.org_name)) {
   console.error('Missing config values');
   process.exit(1);
 }
-console.log('port: ' + config.port);
-console.log('verify_token: ' + config.verify_token);
 
 var app = express();
 app.set('port', config.port);
@@ -57,7 +56,60 @@ function verifyRequestSignature(req, res, buf) {
   }
 }
 
-function sendMessage(id, text) {
+function sendTest(user_id, cb){
+  request({
+    baseUrl: GRAPH_API_BASE,
+    url: '/me/messages',
+    qs: { access_token: config.access_token },
+    method: 'POST',
+    json: {
+	  "recipient":{
+		"id": user_id
+	  },
+	  "message": {
+		"attachment": {
+		  "type": "template",
+		  "payload": {
+			"template_type": "list",
+			"top_element_style": "compact",
+			"elements": [
+			  {
+				"title": "Classic T-Shirt Collection",
+				"subtitle": "See all our colors\n",
+				"default_action":
+					{
+						"type": "web_url",
+						"webview_height_ratio": "compact",
+						"url": "https://mcgillrobotics.facebook.com/profile.php?sk=about"
+					}
+			  },
+			  {
+				"title": "Classic White T-Shirt",
+				"subtitle": "See all our colors",
+			  },
+			  {
+				"title": "Classic Blue T-Shirt",
+				"subtitle": "100% Cotton, 200% Comfortable",
+			  }
+			]
+		  }
+		}
+	  }
+	}
+  }, function (error, response, body) {
+    if (!error && response.statusCode == 200) {
+      var recipientId = body.recipient_id;
+      var messageId = body.message_id;
+      if (cb) {
+        cb(recipientId, messageId);
+      }
+    } else {
+      console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
+    }
+  });
+}
+
+function sendMessage(id, text, cb) {
   request({
     baseUrl: GRAPH_API_BASE,
     url: '/me/messages',
@@ -75,9 +127,86 @@ function sendMessage(id, text) {
     if (!error && response.statusCode == 200) {
       var recipientId = body.recipient_id;
       var messageId = body.message_id;
+      if (cb) {
+        cb(recipientId, messageId);
+      }
     } else {
       console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
     }
+  });
+}
+
+function sendListOfMessages(id, msgs, cb) {
+  function sendSingleMessage(index, cb) {
+    if (index < msgs.length) {
+      sendMessage(id, msgs[index], () => sendSingleMessage(index + 1));
+    } else if (cb) {
+      cb();
+    }
+  }
+  sendSingleMessage(0, cb);
+}
+
+function sendRequest(url, method, json) {
+}
+
+function pageCallback(data) {
+  data.entry.forEach(function(pageEntry) {
+    pageEntry.messaging.forEach(function(messagingEvent) {
+      if (messagingEvent.message) {
+        var user_id = messagingEvent.sender.id;
+        sendWelcomeMsgs(user_id);
+      }
+    });
+  });
+}
+
+function getUserFirstName(user_id, cb) {
+  request({
+    baseUrl: GRAPH_API_BASE,
+    url: `/${user_id}`,
+    qs: { access_token: config.access_token },
+    method: 'GET',
+    json: true
+  }, function (error, response, body) {
+    if (!error && response.statusCode == 200) {
+      if (cb) {
+        cb(body.name.split(' ')[0]);
+      }
+    } else {
+      console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
+    }
+  });
+}
+
+function replyChatMsgs(user_id) {
+  getUserFirstName(user_id, name => {
+    sendMessage(messagingEvent.sender.id,
+                `Sorry ${name}, I am not programmed to chat with you :(`);
+  });
+
+}
+
+function sendWelcomeMsgs(user_id) {
+  getUserFirstName(user_id, name => {
+    sendMessage(
+        user_id,
+        `Hello ${name}, welcome to ${config.org_name} :)`,
+        () => sendListOfMessages(user_id, welcome_msgs));
+  });
+}
+
+function securityCallback(data) {
+  data.entry.forEach(function(entry) {
+    entry.changes.forEach(function(change) {
+      if (change.field == 'admin_activity') {
+        if (change.value.event == 'ADMIN_ACTIVATE_ACCOUNT') {
+          var user_id = change.value.target_id;
+          console.log("New Account Created, sending message to new user " + user_id);
+          sendWelcomeMsgs(user_id);
+        }
+      }
+    });
   });
 }
 
@@ -97,28 +226,16 @@ app.post('/welcome', function (req, res) {
 
   // Make sure this is a page subscription
   if (data.object == 'page') {
-    // Iterate over each entry
-    // There may be multiple if batched
-    data.entry.forEach(function(pageEntry) {
-      // Iterate over each messaging event
-      pageEntry.messaging.forEach(function(messagingEvent) {
-        if (messagingEvent.message) {
-          sendMessage(messagingEvent.sender.id,
-                      'Sorry, I can\'t reply to messages yet :(');
-        }
-      });
-    });
+    pageCallback(data);
     res.sendStatus(200);
   } else if (data.object == 'workplace_security') {
-    if (data.entry.changes.value.event == 'ADMIN_CREATE_ACCOUNT') {
-      console.log('User' + data.entry.changes.value.target_id);
-    }
+    securityCallback(data);
     res.sendStatus(200);
   }
 });
 
 app.listen(app.get('port'), function() {
-  console.log('Node app is running on port', app.get('port'));
+  console.log('welcome_bot is running on port', app.get('port'));
 });
 
 module.exports = app;
