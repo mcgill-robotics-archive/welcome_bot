@@ -56,72 +56,13 @@ function verifyRequestSignature(req, res, buf) {
   }
 }
 
-function sendTest(user_id, cb){
+function sendMessage(id, msg, cb) {
   request({
     baseUrl: GRAPH_API_BASE,
     url: '/me/messages',
     qs: { access_token: config.access_token },
     method: 'POST',
-    json: {
-	  "recipient":{
-		"id": user_id
-	  },
-	  "message": {
-		"attachment": {
-		  "type": "template",
-		  "payload": {
-			"template_type": "list",
-			"top_element_style": "compact",
-			"elements": [
-			  {
-				"title": "Classic T-Shirt Collection",
-				"subtitle": "See all our colors\n",
-				"default_action":
-					{
-						"type": "web_url",
-						"webview_height_ratio": "compact",
-						"url": "https://mcgillrobotics.facebook.com/profile.php?sk=about"
-					}
-			  },
-			  {
-				"title": "Classic White T-Shirt",
-				"subtitle": "See all our colors",
-			  },
-			  {
-				"title": "Classic Blue T-Shirt",
-				"subtitle": "100% Cotton, 200% Comfortable",
-			  }
-			]
-		  }
-		}
-	  }
-	}
-  }, function (error, response, body) {
-    if (!error && response.statusCode == 200) {
-      var recipientId = body.recipient_id;
-      var messageId = body.message_id;
-      if (cb) {
-        cb(recipientId, messageId);
-      }
-    } else {
-      console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
-    }
-  });
-}
-
-function sendMessage(id, text, cb) {
-  request({
-    baseUrl: GRAPH_API_BASE,
-    url: '/me/messages',
-    qs: { access_token: config.access_token },
-    method: 'POST',
-    json: {
-      recipient: {
-        id: id
-      },
-      message: {
-        text: text
-      }
+    json: msg
     }
   }, function (error, response, body) {
     if (!error && response.statusCode == 200) {
@@ -136,10 +77,13 @@ function sendMessage(id, text, cb) {
   });
 }
 
-function sendListOfMessages(id, msgs, cb) {
+function send:ListOfMessages(id, msgs, cb) {
   function sendSingleMessage(index, cb) {
     if (index < msgs.length) {
-      sendMessage(id, msgs[index], () => sendSingleMessage(index + 1));
+      var msg = new Object();
+      msg.recipient.id = id;
+      msg.message = msgs[index];
+      sendMessage(id, msg, () => sendSingleMessage(index + 1));
     } else if (cb) {
       cb();
     }
