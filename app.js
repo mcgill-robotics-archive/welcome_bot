@@ -17,7 +17,7 @@ bodyParser = require('body-parser'),
            request = require('request'),
            config = require('./config.json');
 
-const GRAPH_API_BASE = 'https://graph.facebook.com/v2.6';
+const GRAPH_API_BASE = 'https://graph.facebook.com/v2.10';
 
 if (!(config.app_id &&
       config.app_secret &&
@@ -27,8 +27,8 @@ if (!(config.app_id &&
   console.error('Missing config values');
   process.exit(1);
 }
-console.log("port: " + config.port);
-console.log("verify_token: " + config.verify_token);
+console.log('port: ' + config.port);
+console.log('verify_token: ' + config.verify_token);
 
 var app = express();
 app.set('port', config.port);
@@ -57,23 +57,24 @@ function verifyRequestSignature(req, res, buf) {
   }
 }
 
-function sendMessage(messageData) {
+function sendMessage(id, text) {
   request({
     baseUrl: GRAPH_API_BASE,
     url: '/me/messages',
     qs: { access_token: config.access_token },
     method: 'POST',
-    json: messageData
+    json: {
+      recipient: {
+        id: id
+      },
+      message: {
+        text: text
+      }
+    }
   }, function (error, response, body) {
     if (!error && response.statusCode == 200) {
       var recipientId = body.recipient_id;
       var messageId = body.message_id;
-
-      if (messageId) {
-        console.log('Successfully sent message with id %s to recipient %s', messageId, recipientId);
-      } else {
-        console.log('Successfully sent message to recipient %s', recipientId);
-      }
     } else {
       console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
     }
@@ -83,7 +84,7 @@ function sendMessage(messageData) {
 app.get('/welcome', function(req, res) {
   if (req.query['hub.mode'] === 'subscribe' &&
       req.query['hub.verify_token'] === config.verify_token) {
-    console.log('Validating webhook');
+    console.log('Validated webhook.');
     res.status(200).send(req.query['hub.challenge']);
   } else {
     console.error('Failed validation. Make sure the validation tokens match.');
@@ -102,21 +103,16 @@ app.post('/welcome', function (req, res) {
       // Iterate over each messaging event
       pageEntry.messaging.forEach(function(messagingEvent) {
         if (messagingEvent.message) {
-          var messageData = {
-            recipient: {
-              id: messagingEvent.sender.id
-            },
-            message: {
-              text: "Sorry, I can't reply to messages yet :("
-            }
-          };
-          sendMessage(messageData);
+          sendMessage(messagingEvent.sender.id,
+                      'Sorry, I can\'t reply to messages yet :(');
         }
       });
     });
-    // Assume all went well.
-    // You must send back a 200, within 20 seconds, to let us know you've
-    // successfully received the callback. Otherwise, the request will time out.
+    res.sendStatus(200);
+  } else if (data.object == 'workplace_security') {
+    if (data.entry.changes.value.event == 'ADMIN_CREATE_ACCOUNT') {
+      console.log('User' + data.entry.changes.value.target_id);
+    }
     res.sendStatus(200);
   }
 });
