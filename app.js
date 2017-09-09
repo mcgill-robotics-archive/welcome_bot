@@ -57,7 +57,6 @@ function verifyRequestSignature(req, res, buf) {
 }
 
 function sendMessage(msg, cb) {
-  console.log(JSON.stringify(msg, null, 4));
   request({
     baseUrl: GRAPH_API_BASE,
     url: '/me/messages',
