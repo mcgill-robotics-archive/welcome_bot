@@ -127,7 +127,7 @@ function processSetupComplete(user_id) {
       var msg = "Your profile is still missing ";
       if (missed_fields.length > 1) {
         for (var i=0; i < (missed_fields.length - 1); i++){
-          msg = msg + missed_fields[i]; + ', '
+          msg = msg + missed_fields[i] + ', '
         }
         msg = msg + ' and ';
       }
