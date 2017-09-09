@@ -90,9 +90,6 @@ function sendListOfMessages(id, msgs, cb) {
   sendSingleMessage(0, cb);
 }
 
-function sendRequest(url, method, json) {
-}
-
 function printObj(obj) {
   console.log(JSON.stringify(obj, null, 4));
 }
@@ -102,7 +99,7 @@ function pageCallback(data) {
     pageEntry.messaging.forEach(function(messagingEvent) {
       if (messagingEvent.message) {
         var user_id = messagingEvent.sender.id;
-        sendWelcomeMsgs(user_id);
+        processSetupComplete(user_id);
       } else if (messagingEvent.postback) {
         processPostback(messagingEvent);
       }
@@ -179,7 +176,6 @@ function sendQuickMsg(id, text){
       console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
     }
   });
-
 }
 
 function checkMissedFields(profile) {
@@ -203,8 +199,10 @@ function checkMissedFields(profile) {
   if (!profile.managers) {
     missed_fields.push('a manager');
   }
+
   return missed_fields;
 }
+
 function getUserProfile(user_id, cb) {
   request({
     baseUrl: GRAPH_API_BASE,
@@ -213,8 +211,8 @@ function getUserProfile(user_id, cb) {
     method: 'GET',
     json: true
   }, (err, res, body) => {
-    if(!err && res.statusCode == 200) {
-      if(cb) {
+    if (!err && res.statusCode == 200) {
+      if (cb) {
         cb(body);
       }
     } else {
@@ -248,7 +246,6 @@ function replyChatMsgs(user_id) {
     msg.message = { text: `Sorry ${name}, I am not programmed to chat with you :(` };
     sendMessage(msg);
   });
-
 }
 
 function sendWelcomeMsgs(user_id) {
