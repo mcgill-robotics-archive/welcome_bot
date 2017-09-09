@@ -11,102 +11,40 @@
         "type": "template",
         "payload": {
           "template_type": "list",
-          "top_element_style": "large",
+          "top_element_style": "compact",
           "elements": [
             {
-              "title": "1) Setup Your Profile."
+              "title": "1. Setup your profile",
+              "subtitle": "Add a profile picture, cover photo, role, department, and manager.",
+              "default_action": {
+                "type": "web_url",
+                "url": "https://mcgillrobotics.facebook.com/profile.php?sk=about"
+              }
             },
             {
-              "title": "Add a profile picture and cover photo."
+              "title": "2. Go over your settings",
+              "subtitle": "Such as general settings, privacy settings, and notifications settings.",
+              "default_action": {
+                "type": "web_url",
+                "url": "https://mcgillrobotics.facebook.com/settings"
+              }
             },
             {
-              "title": "Add your role, department, and manager."
-            }
-          ],
-           "buttons": [
-            {
-              "type":"web_url",
-              "title": "Go there!",
-              "url": "https://mcgillrobotics.facebook.com/profile.php?sk=about",
-              "webview_height_ratio": "compact",
-            }
-          ]
-
-        }
-      }
-    },
-    {
-      "attachment": {
-        "type": "template",
-        "payload": {
-          "template_type": "list",
-          "top_element_style": "large",
-          "elements": [
-            {
-              "title": "2) Go over your settings:"
+              "title": "3. Join groups you interact with",
+              "subtitle": "Note: You can see posts without joining.",
+              "default_action": {
+                "type":"web_url",
+                "url": "https://mcgillrobotics.facebook.com/groups/?category=community"
+              }
             },
             {
-              "title": "General settings."
-            },
-            {
-              "title": "Notifications settings."
-            }
-          ],
-           "buttons": [
-            {
-              "type":"web_url",
-              "title": "Go there!",
-              "url": "https://mcgillrobotics.facebook.com/settings",
-              "webview_height_ratio": "compact",
-            }
-          ]
-        }
-      }
-    },
-    {
-      "attachment": {
-        "type": "template",
-        "payload": {
-          "template_type": "list",
-          "top_element_style": "large",
-          "elements": [
-            {
-              "title": "3) Join groups you intercat with."
-            },
-            {
-              "title": "you can see posts without join that group."
-            },
-            {
-              "title": "Don't join groups you will not interact with."
-            }
-          ],
-           "buttons": [
-            {
-              "type":"web_url",
-              "title": "Go there!",
-              "url": "https://mcgillrobotics.facebook.com/groups/?category=community",
-              "webview_height_ratio": "compact",
-            }
-          ]
-        }
-      }
-    },
-    {
-      "attachment": {
-        "type": "template",
-        "payload": {
-          "template_type": "list",
-          "top_element_style": "large",
-          "elements": [
-            {
-              "title": "4) Download mobile apps."
-            },
-            {
-              "title": "\"Workplace\" for notifications."
-            },
-            {
-              "title": "\"Work Chat\" for communications."
-            }
+              "title": "4. Download mobile apps",
+              "subtitle": "\"Workplace\" for notifications and \"Work Chat\" for communication.",
+              "default_action": {
+                "type":"web_url",
+                "url": "https://www.facebook.com/workplace"
+              }
+             }
           ]
         }
       }

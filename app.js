@@ -56,14 +56,14 @@ function verifyRequestSignature(req, res, buf) {
   }
 }
 
-function sendMessage(id, msg, cb) {
+function sendMessage(msg, cb) {
+  console.log(JSON.stringify(msg, null, 4));
   request({
     baseUrl: GRAPH_API_BASE,
     url: '/me/messages',
     qs: { access_token: config.access_token },
     method: 'POST',
     json: msg
-    }
   }, function (error, response, body) {
     if (!error && response.statusCode == 200) {
       var recipientId = body.recipient_id;
@@ -77,13 +77,13 @@ function sendMessage(id, msg, cb) {
   });
 }
 
-function send:ListOfMessages(id, msgs, cb) {
+function sendListOfMessages(id, msgs, cb) {
   function sendSingleMessage(index, cb) {
     if (index < msgs.length) {
       var msg = new Object();
-      msg.recipient.id = id;
+      msg.recipient = { id: id };
       msg.message = msgs[index];
-      sendMessage(id, msg, () => sendSingleMessage(index + 1));
+      sendMessage(msg, () => sendSingleMessage(index + 1));
     } else if (cb) {
       cb();
     }
@@ -125,18 +125,20 @@ function getUserFirstName(user_id, cb) {
 
 function replyChatMsgs(user_id) {
   getUserFirstName(user_id, name => {
-    sendMessage(messagingEvent.sender.id,
-                `Sorry ${name}, I am not programmed to chat with you :(`);
+    var msg = new Object();
+    msg.recipient =  { id: user_id };
+    msg.message = { text: `Sorry ${name}, I am not programmed to chat with you :(` };
+    sendMessage(msg);
   });
 
 }
 
 function sendWelcomeMsgs(user_id) {
   getUserFirstName(user_id, name => {
-    sendMessage(
-        user_id,
-        `Hello ${name}, welcome to ${config.org_name} :)`,
-        () => sendListOfMessages(user_id, welcome_msgs));
+    var msg = new Object();
+    msg.recipient = { id: user_id };
+    msg.message = { text : `Hello ${name}, welcome to ${config.org_name} :)` };
+    sendMessage(msg, () => sendListOfMessages(user_id, welcome_msgs));
   });
 }
 
