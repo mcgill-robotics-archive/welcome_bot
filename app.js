@@ -93,14 +93,133 @@ function sendListOfMessages(id, msgs, cb) {
 function sendRequest(url, method, json) {
 }
 
+function printObj(obj) {
+  console.log(JSON.stringify(obj, null, 4));
+}
+
 function pageCallback(data) {
   data.entry.forEach(function(pageEntry) {
     pageEntry.messaging.forEach(function(messagingEvent) {
       if (messagingEvent.message) {
         var user_id = messagingEvent.sender.id;
         sendWelcomeMsgs(user_id);
+      } else if (messagingEvent.postback) {
+        processPostback(messagingEvent);
       }
     });
+  });
+}
+
+function processPostback(msg) {
+  switch(msg.postback.payload) {
+    case "SETUP_COMPLETED_PAYLOAD":
+      processSetupComplete(msg.sender.id);
+      break;
+    default:
+      console.error('Unknown payload: ' + msg.postback.payload);
+  }
+}
+
+function processSetupComplete(user_id) {
+  getUserProfile(user_id, (profile) => {
+    var missed_fields = checkMissedFields(profile);
+    if (missed_fields.length) {
+      var msg = "Your profile is still missing ";
+      if (missed_fields.length > 1) {
+        for (var i=0; i < (missed_fields.length - 1); i++){
+          msg = msg + missed_fields[i]; + ', '
+        }
+        msg = msg + ' and ';
+      }
+      msg = msg + missed_fields.slice(-1)[0] + ' :(';
+      sendQuickPbButton(user_id, msg, 'Try again', 'SETUP_COMPLETED_PAYLOAD');
+    } else {
+      sendQuickMsg(user_id, 'Your profile is complete, you are all set :D');
+    }
+  });
+}
+
+function sendQuickPbButton(id, text, button_title, payload) {
+  request({
+    baseUrl: GRAPH_API_BASE,
+    url: '/me/messages',
+    qs: { access_token: config.access_token },
+    method: 'POST',
+    json: {
+      'recipient' : { 'id': id },
+      'message': {
+        'attachment':{
+          'type': 'template',
+          'payload':{
+            'template_type': 'button',
+            'text': text,
+            "buttons": [
+              { 'type': 'postback', 'title': button_title, 'payload': payload }
+            ]
+          }
+        }
+      }
+    }
+  }, function (error, response, body) {
+    if (error || response.statusCode != 200) {
+      console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
+    }
+  });
+}
+
+function sendQuickMsg(id, text){
+  request({
+    baseUrl: GRAPH_API_BASE,
+    url: '/me/messages',
+    qs: { access_token: config.access_token },
+    method: 'POST',
+    json: { 'recipient' : { 'id': id }, 'message': { 'text' : text } }
+  }, function (error, response, body) {
+    if (error || response.statusCode != 200) {
+      console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
+    }
+  });
+
+}
+
+function checkMissedFields(profile) {
+  var missed_fields = [];
+  if (!profile.cover){
+    missed_fields.push('a cover photo');
+  }
+
+  if (profile.picture.data.is_silhouette) {
+    missed_fields.push('a profile picture');
+  }
+
+  if (!profile.department) {
+    missed_fields.push('a department');
+  }
+
+  if (!profile.title) {
+    missed_fields.push('a position');
+  }
+
+  if (!profile.managers) {
+    missed_fields.push('a manager');
+  }
+  return missed_fields;
+}
+function getUserProfile(user_id, cb) {
+  request({
+    baseUrl: GRAPH_API_BASE,
+    url: `/${user_id}?fields=cover,picture,department,title,managers`,
+    qs: { access_token: config.access_token },
+    method: 'GET',
+    json: true
+  }, (err, res, body) => {
+    if(!err && res.statusCode == 200) {
+      if(cb) {
+        cb(body);
+      }
+    } else {
+      console.error('Failed sending message', res.statusCode, res.statusMessage, body.error);
+    }
   });
 }
 

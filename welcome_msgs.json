@@ -15,7 +15,7 @@
           "elements": [
             {
               "title": "1. Setup your profile",
-              "subtitle": "Add a profile picture, cover photo, role, department, and manager.",
+              "subtitle": "Add profile picture, cover photo, position, department, and manager.",
               "default_action": {
                 "type": "web_url",
                 "url": "https://mcgillrobotics.facebook.com/profile.php?sk=about"
@@ -45,6 +45,13 @@
                 "url": "https://www.facebook.com/workplace"
               }
              }
+          ],
+          "buttons": [
+            {
+              "title": "Done!",
+              "type": "postback",
+              "payload": "SETUP_COMPLETED_PAYLOAD"
+            }
           ]
         }
       }
