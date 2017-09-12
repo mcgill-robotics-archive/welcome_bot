@@ -261,7 +261,9 @@ function securityCallback(data) {
   data.entry.forEach(function(entry) {
     entry.changes.forEach(function(change) {
       if (change.field == 'admin_activity') {
-        if (change.value.event == 'ADMIN_ACTIVATE_ACCOUNT') {
+        // printObj(change);
+        if (change.value.event == 'ADMIN_ACTIVATE_ACCOUNT' ||
+            change.value.event == 'ADMIN_CREATE_ACCOUNT') {
           var user_id = change.value.target_id;
           console.log("New Account Created, sending message to new user " + user_id);
           sendWelcomeMsgs(user_id);
