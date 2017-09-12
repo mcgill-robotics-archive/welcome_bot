@@ -126,7 +126,7 @@ function processSetupComplete(user_id) {
         for (var i=0; i < (missed_fields.length - 1); i++){
           msg = msg + missed_fields[i] + ', '
         }
-        msg = msg + ' and ';
+        msg = msg + 'and ';
       }
       msg = msg + missed_fields.slice(-1)[0] + ' :(';
       sendQuickPbButton(user_id, msg, 'Try again', 'SETUP_COMPLETED_PAYLOAD');
