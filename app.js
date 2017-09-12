@@ -265,7 +265,7 @@ function securityCallback(data) {
         if (change.value.event == 'ADMIN_ACTIVATE_ACCOUNT' ||
             change.value.event == 'ADMIN_CREATE_ACCOUNT') {
           var user_id = change.value.target_id;
-          console.log("New Account Created, sending message to new user " + user_id);
+          console.log("Account created/activated, sending message to new user " + user_id);
           sendWelcomeMsgs(user_id);
         }
       }
