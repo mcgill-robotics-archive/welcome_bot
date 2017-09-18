@@ -16,6 +16,7 @@ const
       express = require('express'),
       request = require('request'),
       config = require('./config.json'),
+      sqlite3 = require('sqlite3'),
       welcome_msgs = require('./welcome_msgs.json').msgs;
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v2.10';
@@ -24,12 +25,15 @@ if (!(config.app_id &&
       config.app_secret &&
       config.verify_token &&
       config.access_token &&
-      config.org_name)) {
+      config.org_name &&
+      config.login_log)) {
   console.error('Missing config values');
   process.exit(1);
 }
 
+var login_log = new sqlite3.Database(config.login_log);
 var app = express();
+
 app.set('port', config.port);
 app.set('view engine', 'ejs');
 app.use(bodyParser.json({ verify: verifyRequestSignature }));
@@ -259,7 +263,15 @@ function sendWelcomeMsgs(user_id) {
 
 function securityCallback(data) {
   data.entry.forEach(function(entry) {
+    // printObj(entry);
     entry.changes.forEach(function(change) {
+      if (change.field == 'sessions') {
+        if (change.value.event == 'LOG_IN') {
+          console.log(`Update last login for ${change.value.target_id}`);
+          login_log.run('INSERT OR REPLACE INTO login_log VALUES (?, ?);',
+                        change.value.target_id, change.value.timestamp);
+        }
+      }
       if (change.field == 'admin_activity') {
         // printObj(change);
         if (change.value.event == 'ADMIN_ACTIVATE_ACCOUNT' ||
@@ -272,6 +284,7 @@ function securityCallback(data) {
     });
   });
 }
+
 
 app.get('/welcome', function(req, res) {
   if (req.query['hub.mode'] === 'subscribe' &&
@@ -286,13 +299,15 @@ app.get('/welcome', function(req, res) {
 
 app.post('/welcome', function (req, res) {
   var data = req.body;
-
   // Make sure this is a page subscription
   if (data.object == 'page') {
     pageCallback(data);
     res.sendStatus(200);
   } else if (data.object == 'workplace_security') {
     securityCallback(data);
+    res.sendStatus(200);
+  } else {
+    // printObj(data);
     res.sendStatus(200);
   }
 });
