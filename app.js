@@ -9,7 +9,6 @@
 
 /* jshint node: true, devel: true */
 'use strict';
-
 const
       bodyParser = require('body-parser'),
       crypto = require('crypto'),
@@ -21,17 +20,21 @@ const
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v2.10';
 
+var debug_mode = (process.env.DEBUG == 'true' ? true : false);
+console.log(`Debug Mode: ${debug_mode}`);
+
 if (!(config.app_id &&
       config.app_secret &&
       config.verify_token &&
       config.access_token &&
       config.org_name &&
-      config.login_log)) {
+      config.activity_log &&
+      config.log_table_name)) {
   console.error('Missing config values');
   process.exit(1);
 }
 
-var login_log = new sqlite3.Database(config.login_log);
+var activity_log = new sqlite3.Database(config.activity_log);
 var app = express();
 
 app.set('port', config.port);
@@ -98,12 +101,134 @@ function printObj(obj) {
   console.log(JSON.stringify(obj, null, 4));
 }
 
+function getAllUsers(cb) {
+  function getUser(after, user_list, cb){
+    var url = '/community/members';
+    if (after) {
+      url = url + '?after=' + after;
+    }
+    request({
+      baseUrl: GRAPH_API_BASE,
+      url: url,
+      qs: { access_token: config.access_token},
+      method: 'GET',
+      json: true
+    }, function (error, res, body) {
+      if (!error && res.statusCode == 200) {
+        // printObj(body);
+        if (body.data.length) {
+          // Add more user to the user list and request more.
+          body.data.forEach( function(user) {
+            user_list.push(user);
+          });
+          printDebug('Getting next page');
+          printDebug('Total users so far: ' + user_list.length);
+          getUser(body.paging.cursors.after, user_list, cb);
+        } else {
+          if (cb){
+            printDebug('Total users: ' + user_list.length);
+            cb(user_list);
+          }
+        }
+      } else {
+        console.error('Failed to get user', res.statusCode, res.statusMessage, body.error);
+      }
+    });
+  }
+
+  printDebug('Getting all users');
+  getUser(0, [], cb);
+}
+function printDebug(msg) {
+  if (debug_mode) {
+    if(typeof msg == 'string'){
+      console.log(msg);
+    } else {
+      printObj(msg);
+    }
+  }
+}
+
+function secondsToString(time) {
+  var ret = '';
+  if (time > 0) {
+    ret = time % 60 + 's ' + ret;
+    time = Math.floor(time / 60);
+    if (time > 0) {
+      ret = time % 60 + 'min '+ret;
+      time = Math.floor(time / 60);
+      if (time > 0) {
+        ret = time % 60 + 'h ' + ret;
+        time = Math.floor(time / 24);
+        if ( time > 0 ) {
+          ret = time + 'd ' + ret;
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+function deactivateUser(user) {
+  console.log(`User ${user} is now deactivated`);
+}
+
+function checkInactivity(){
+  getAllUsers((users) => {
+    var time_now = Math.floor((new Date).getTime() / 1000);
+    users.forEach((user) => {
+      var sql = `SELECT * FROM ${config.log_table_name}`
+                + ` WHERE user_id=${user.id}`;
+      activity_log.get(sql, [], (err, data) =>{
+        if (!err) {
+          if (data) {
+            var inactive_time = time_now - Math.floor(data.last_activity);
+            if (inactive_time > 0) {
+              printDebug(`${user.id}: ${secondsToString(inactive_time)}`);
+              if(inactive_time > 30 * 24 * 60 * 60 && !data.warning_sent){
+                console.log(`User ${user.id} has been inactive for awhile, warning sent.`);
+                var msg = `${user.name} has been inactive for awhile, warning sent.`;
+                sendAdminsMsg(msg);
+                activity_log.run(`REPLACE INTO ${config.log_table_name} `
+                  + 'VALUES (?, ?, 1);', user.id, data.last_activity);
+              } else if (inactive_time > 45 * 24 * 60 * 60 && data.warning_sent){
+                console.log(`Disactivate user ${user.id} due to inactivity.`);
+                sendAdminsMsg(`${user.name} has been`
+                    + ' marked to be deactivated due to  inactivity');
+                activity_log.run(`DELETE FROM ${config.log_table_name}`
+                    + ` WHERE user_id=${user.id};`);
+                deactivateUser(user.id);
+              }
+            }
+          } else {
+            printDebug(`${user.id}: No data. Skipping...`);
+          }
+        }
+      });
+    });
+  });
+}
+
+function isAdmin(id) {
+  for(var i = 0; i < config.admins.length; i++){
+    if (id == config.admins[i]){
+      return true;
+    }
+  }
+  return false;
+}
+
 function pageCallback(data) {
   data.entry.forEach(function(pageEntry) {
     pageEntry.messaging.forEach(function(messagingEvent) {
       if (messagingEvent.message) {
         var user_id = messagingEvent.sender.id;
-        processSetupComplete(user_id);
+        if (isAdmin(user_id)){
+          checkInactivity();
+          sendAdminsMsg(`Inativity check initiated by ${user_id}`);
+        } else {
+          processSetupComplete(user_id);
+        }
       } else if (messagingEvent.postback) {
         processPostback(messagingEvent);
       }
@@ -168,7 +293,14 @@ function sendQuickPbButton(id, text, button_title, payload) {
   });
 }
 
-function sendQuickMsg(id, text){
+function sendAdminsMsg(msg) {
+  config.admins.forEach( (admin) => {
+    sendQuickMsg(admin, msg);
+  });
+}
+
+
+function sendQuickMsg(id, text) {
   request({
     baseUrl: GRAPH_API_BASE,
     url: '/me/messages',
@@ -243,15 +375,6 @@ function getUserFirstName(user_id, cb) {
   });
 }
 
-function replyChatMsgs(user_id) {
-  getUserFirstName(user_id, name => {
-    var msg = new Object();
-    msg.recipient =  { id: user_id };
-    msg.message = { text: `Sorry ${name}, I am not programmed to chat with you :(` };
-    sendMessage(msg);
-  });
-}
-
 function sendWelcomeMsgs(user_id) {
   getUserFirstName(user_id, name => {
     var msg = new Object();
@@ -261,15 +384,20 @@ function sendWelcomeMsgs(user_id) {
   });
 }
 
+function updateActivityLog(user_id, time) {
+  console.log(`Update last activity for ${user_id}`);
+  activity_log.run(`INSERT OR REPLACE INTO ${config.log_table_name} `
+                   + 'VALUES (?, ?, 0);', user_id, time);
+}
+
 function securityCallback(data) {
   data.entry.forEach(function(entry) {
     // printObj(entry);
+    var time = entry.time;
     entry.changes.forEach(function(change) {
       if (change.field == 'sessions') {
         if (change.value.event == 'LOG_IN') {
-          console.log(`Update last login for ${change.value.target_id}`);
-          login_log.run('INSERT OR REPLACE INTO login_log VALUES (?, ?);',
-                        change.value.target_id, change.value.timestamp);
+          updateActivityLog(change.value.target_id, time)
         }
       }
       if (change.field == 'admin_activity') {
@@ -285,6 +413,42 @@ function securityCallback(data) {
   });
 }
 
+function userActivityCallback(data){
+  switch (data.object) {
+    case 'group':
+      data.entry.forEach(function(entry) {
+        var time = entry.time;
+        entry.changes.forEach(function(change) {
+          var type = change.field;
+          if (type == 'comments' || type == "posts") {
+            updateActivityLog(change.value.from.id, time);
+          } else {
+            console.error(`Unknown group change type: ${type}`);
+            printObj(change);
+          }
+        });
+      });
+      break;
+    case 'user':
+      data.entry.forEach(function(entry) {
+        var time = entry.time;
+        var user_id = entry.id;
+        entry.changes.forEach(function(change) {
+          var type = change.field;
+          if (type == 'events') {
+            updateActivityLog(user_id, time);
+          } else {
+            console.error(`Unknown user change type: ${type}`);
+            printObj(change);
+          }
+        });
+      });
+      break;
+    default:
+      console.error('Unkwon activity type');
+      printObj(data);
+  }
+}
 
 app.get('/welcome', function(req, res) {
   if (req.query['hub.mode'] === 'subscribe' &&
@@ -299,6 +463,8 @@ app.get('/welcome', function(req, res) {
 
 app.post('/welcome', function (req, res) {
   var data = req.body;
+  printDebug('Received Webhook:');
+  printDebug(data);
   // Make sure this is a page subscription
   if (data.object == 'page') {
     pageCallback(data);
@@ -307,8 +473,8 @@ app.post('/welcome', function (req, res) {
     securityCallback(data);
     res.sendStatus(200);
   } else {
-    // printObj(data);
     res.sendStatus(200);
+    userActivityCallback(data);
   }
 });
 
