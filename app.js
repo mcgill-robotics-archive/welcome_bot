@@ -367,7 +367,7 @@ function getUserFirstName(user_id, cb) {
   }, function (error, response, body) {
     if (!error && response.statusCode == 200) {
       if (cb) {
-        cb(body.name.split(' ')[0]);
+        cb(body.first_name);
       }
     } else {
       console.error('Failed sending message', response.statusCode, response.statusMessage, body.error);
