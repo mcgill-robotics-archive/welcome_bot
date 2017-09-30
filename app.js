@@ -435,7 +435,7 @@ function userActivityCallback(data){
         var user_id = entry.id;
         entry.changes.forEach(function(change) {
           var type = change.field;
-          if (type == 'events') {
+          if (type == 'events' || type == 'status') {
             updateActivityLog(user_id, time);
           } else {
             console.error(`Unknown user change type: ${type}`);
