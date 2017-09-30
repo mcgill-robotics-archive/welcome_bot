@@ -23,7 +23,7 @@
             },
             {
               "title": "2. Go over your settings",
-              "subtitle": "Such as general settings, privacy settings, and notifications settings.",
+              "subtitle": "Such as general, privacy, and notifications settings.",
               "default_action": {
                 "type": "web_url",
                 "url": "https://mcgillrobotics.facebook.com/settings"
@@ -39,7 +39,7 @@
             },
             {
               "title": "4. Download mobile apps",
-              "subtitle": "\"Workplace\" for notifications and \"Work Chat\" for communication.",
+              "subtitle": "\"Workplace\" as the core app and \"Work Chat\" as the messenger app.",
               "default_action": {
                 "type":"web_url",
                 "url": "https://www.facebook.com/workplace"
