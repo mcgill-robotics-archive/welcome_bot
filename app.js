@@ -27,7 +27,9 @@ if (!(config.app_id &&
       config.app_secret &&
       config.verify_token &&
       config.access_token &&
+      config.org_id &&
       config.org_name &&
+      config.alumni_group_id &&
       config.activity_log &&
       config.log_table_name)) {
   console.error('Missing config values');
@@ -102,7 +104,7 @@ function printObj(obj) {
 }
 
 function getAllUsers(cb) {
-  function getUser(after, user_list, cb){
+  function getUser(after, user_list, cb) {
     var url = '/community/members';
     if (after) {
       url = url + '?after=' + after;
@@ -139,6 +141,46 @@ function getAllUsers(cb) {
   printDebug('Getting all users');
   getUser(0, [], cb);
 }
+
+function getAlumni(cb) {
+  function getAlumnus(after, id_list, cb) {
+    var url = `/${config.alumni_group_id}/members`;
+    if (after) {
+      url = url + '?after=' + after;
+    }
+    request({
+      baseUrl: GRAPH_API_BASE,
+      url: url,
+      qs: { access_token: config.access_token},
+      method: 'GET',
+      json: true
+    }, function (error, res, body) {
+      if (!error && res.statusCode == 200) {
+        printObj(body);
+        if (body.data.length) {
+          // Add more user to the user list and request more.
+          body.data.forEach(function(user) {
+            id_list.push(user.id);
+          });
+          printDebug('Getting next page');
+          printDebug('Total alumni so far: ' + id_list.length);
+          getAlumnus(body.paging.cursors.after, id_list, cb);
+        } else {
+          if (cb){
+            printDebug('Total alumni: ' + id_list.length);
+            cb(id_list);
+          }
+        }
+      } else {
+        console.error('Failed to get user', res.statusCode, res.statusMessage, body.error);
+      }
+    });
+  }
+
+  printDebug('Getting all users');
+  getAlumnus(0, [], cb);
+}
+
 function printDebug(msg) {
   if (debug_mode) {
     if(typeof msg == 'string'){
@@ -173,36 +215,45 @@ function deactivateUser(user) {
   console.log(`User ${user} is now deactivated`);
 }
 
-function checkInactivity(){
+function checkInactivities(admin_id){
   getAllUsers((users) => {
-    var time_now = Math.floor((new Date).getTime() / 1000);
-    users.forEach((user) => {
-      var sql = `SELECT * FROM ${config.log_table_name}`
-                + ` WHERE user_id=${user.id}`;
-      activity_log.get(sql, [], (err, data) =>{
-        if (!err) {
-          if (data) {
-            var inactive_time = time_now - Math.floor(data.last_activity);
-            if (inactive_time > 0) {
-              printDebug(`${user.id}: ${secondsToString(inactive_time)}`);
-              if(inactive_time > 30 * 24 * 60 * 60 && !data.warning_sent){
-                console.log(`User ${user.id} has been inactive for awhile, warning sent.`);
-                var msg = `${user.name} has been inactive for awhile, warning sent.`;
-                sendAdminsMsg(msg);
-                activity_log.run(`REPLACE INTO ${config.log_table_name} `
-                  + 'VALUES (?, ?, 1);', user.id, data.last_activity);
-              } else if (inactive_time > 45 * 24 * 60 * 60 && data.warning_sent){
-                console.log(`Disactivate user ${user.id} due to inactivity.`);
-                sendAdminsMsg(`${user.name} has been`
-                    + ' marked to be deactivated due to  inactivity');
-                activity_log.run(`DELETE FROM ${config.log_table_name}`
-                    + ` WHERE user_id=${user.id};`);
-                deactivateUser(user.id);
+    getAlumni((alumni) => {
+      printDebug(alumni);
+      var time_now = Math.floor((new Date).getTime() / 1000);
+      users.forEach((user) => {
+        if (alumni.indexOf(user.id) > -1) {
+          printDebug(`${user.name} in Alumni group, ignoring...`);
+        } else {
+          var sql = `SELECT * FROM ${config.log_table_name}`
+                  + ` WHERE user_id=${user.id}`;
+          activity_log.get(sql, [], (err, data) =>{
+            if (!err) {
+              if (data) {
+                var inactive_time = time_now - Math.floor(data.last_activity);
+                if (inactive_time > 0) {
+                  printDebug(`${user.id}: ${secondsToString(inactive_time)}`);
+                  if(inactive_time > 30 * 24 * 60 * 60 && !data.warning_sent){
+                    console.log(`${user.name} has been inactive for awhile, warning sent.`);
+                    var msg = `${user.name} has been inactive for awhile, warning sent.`;
+                    var warning_msg = '';
+                    // sendQuickMsg(admin_id, msg);
+                    // sendQuickMsg(user.id, wanrning_msg);
+                    // activity_log.run(`REPLACE INTO ${config.log_table_name} `
+                    //   + 'VALUES (?, ?, 1);', user.id, time_now);
+                  } else if (inactive_time > 15 * 24 * 60 * 60 && data.warning_sent){
+                    console.log(`Disactivate user ${user.id} due to inactivity.`);
+                    sendQuickMsg(admin_id, `${user.name} has been`
+                        + ' marked to be deactivated due to inactivity');
+                    activity_log.run(`DELETE FROM ${config.log_table_name}`
+                      + ` WHERE user_id=${user.id};`);
+                    deactivateUser(user.id);
+                  }
+                }
+              } else {
+                printDebug(`${user.name}: No activity data, warning sent.`);;
               }
             }
-          } else {
-            printDebug(`${user.id}: No data. Skipping...`);
-          }
+          });
         }
       });
     });
@@ -218,14 +269,40 @@ function isAdmin(id) {
   return false;
 }
 
+function remindProfileSetup(admin_id) {
+  getAllUsers((users) => {
+    users.forEach((user) => {
+      getUserProfile(user.id, (profile) => {
+        var missed_fields = checkMissedFields(profile);
+        if (missed_fields.length) {
+          var msg = `Hello ${profile.first_name}, `
+          msg += 'this is a reminder that your profile is still missing ';
+          if (missed_fields.length > 1) {
+            for (var i = 0; i < (missed_fields.length - 1); i++){
+              msg = msg + missed_fields[i] + ', ';
+            }
+            msg += 'and '
+          }
+          msg += missed_fields[missed_fields.length - 1] + '.';
+          if (user.id != config.org_id) {
+            var admin_msg = `Messaging ${user.name}: ${msg}`
+            printDebug(admin_msg);
+            sendQuickPbButton(user.id, msg, 'Try again', 'SETUP_COMPLETED_PAYLOAD');
+          }
+        }
+      })
+    })
+  })
+}
+
 function pageCallback(data) {
   data.entry.forEach(function(pageEntry) {
     pageEntry.messaging.forEach(function(messagingEvent) {
       if (messagingEvent.message) {
         var user_id = messagingEvent.sender.id;
         if (isAdmin(user_id)){
-          checkInactivity();
-          sendAdminsMsg(`Inativity check initiated by ${user_id}`);
+          sendQuickPbButton(user_id, 'Check for inactivities?', 'Yes', 'INACTIVITY_CHECK_PAYLOAD');
+          sendQuickPbButton(user_id, 'Send profile setup reminders?', 'Yes', 'PROFILE_REMINDER_PAYLOAD');
         } else {
           processSetupComplete(user_id);
         }
@@ -238,8 +315,14 @@ function pageCallback(data) {
 
 function processPostback(msg) {
   switch(msg.postback.payload) {
-    case "SETUP_COMPLETED_PAYLOAD":
+    case 'SETUP_COMPLETED_PAYLOAD':
       processSetupComplete(msg.sender.id);
+      break;
+    case 'PROFILE_REMINDER_PAYLOAD':
+      remindProfileSetup(msg.sender.id);
+      break;
+    case 'INACTIVITY_CHECK_PAYLOAD':
+      checkInactivities(msg.sender.id);
       break;
     default:
       console.error('Unknown payload: ' + msg.postback.payload);
@@ -250,7 +333,7 @@ function processSetupComplete(user_id) {
   getUserProfile(user_id, (profile) => {
     var missed_fields = checkMissedFields(profile);
     if (missed_fields.length) {
-      var msg = "Your profile is still missing ";
+      var msg = 'Your profile is still missing ';
       if (missed_fields.length > 1) {
         for (var i=0; i < (missed_fields.length - 1); i++){
           msg = msg + missed_fields[i] + ', '
@@ -279,7 +362,7 @@ function sendQuickPbButton(id, text, button_title, payload) {
           'payload':{
             'template_type': 'button',
             'text': text,
-            "buttons": [
+            'buttons': [
               { 'type': 'postback', 'title': button_title, 'payload': payload }
             ]
           }
@@ -299,7 +382,6 @@ function sendAdminsMsg(msg) {
   });
 }
 
-
 function sendQuickMsg(id, text) {
   request({
     baseUrl: GRAPH_API_BASE,
@@ -316,9 +398,6 @@ function sendQuickMsg(id, text) {
 
 function checkMissedFields(profile) {
   var missed_fields = [];
-  if (!profile.cover){
-    missed_fields.push('a cover photo');
-  }
 
   if (profile.picture.data.is_silhouette) {
     missed_fields.push('a profile picture');
@@ -342,7 +421,7 @@ function checkMissedFields(profile) {
 function getUserProfile(user_id, cb) {
   request({
     baseUrl: GRAPH_API_BASE,
-    url: `/${user_id}?fields=cover,picture,department,title,managers`,
+    url: `/${user_id}?fields=first_name,cover,picture,department,title,managers`,
     qs: { access_token: config.access_token },
     method: 'GET',
     json: true
@@ -405,7 +484,7 @@ function securityCallback(data) {
         if (change.value.event == 'ADMIN_ACTIVATE_ACCOUNT' ||
             change.value.event == 'ADMIN_CREATE_ACCOUNT') {
           var user_id = change.value.target_id;
-          console.log("Account created/activated, sending message to new user " + user_id);
+          console.log('Account created/activated, sending message to new user ' + user_id);
           sendWelcomeMsgs(user_id);
         }
       }
@@ -420,7 +499,7 @@ function userActivityCallback(data){
         var time = entry.time;
         entry.changes.forEach(function(change) {
           var type = change.field;
-          if (type == 'comments' || type == "posts") {
+          if (type == 'comments' || type == 'posts') {
             updateActivityLog(change.value.from.id, time);
           } else {
             console.error(`Unknown group change type: ${type}`);
